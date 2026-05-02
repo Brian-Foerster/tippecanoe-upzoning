@@ -128,12 +128,12 @@
     <p>This is a proxy for where density would be most economically viable if zoning allowed it. Locations where land is expensive relative to its area are the places developers would most want to build — and where upzoning would most likely trigger new construction.</p>
 
     <h3>How land AV is calculated</h3>
-    <p>Indiana law requires all property to be assessed at <strong>100% of market value-in-use</strong>. The Tippecanoe County Assessor uses a Computer-Assisted Mass Appraisal (CAMA) system that splits each parcel's total assessed value into two parts:</p>
+    <p>Indiana law requires all property to be assessed at <strong>100% of market value-in-use</strong>. The Tippecanoe County Assessor uses a Computer-Assisted Mass Appraisal (CAMA) system (provided by Thomson Reuters) that splits each parcel's total assessed value into two parts:</p>
     <ul>
-      <li><strong>Land AV</strong> — the value of the land as if it were vacant, derived from comparable vacant-land sales and location-based pricing by neighbourhood.</li>
-      <li><strong>Improvement AV</strong> — the depreciated replacement cost of whatever is built on it.</li>
+      <li><strong>Land AV</strong> — the value of the land as if vacant. For residential, commercial, and industrial parcels, the assessor establishes a base rate per neighbourhood, then adjusts for lot size, depth, and influence factors (corner lot, topography, etc.).</li>
+      <li><strong>Improvement AV</strong> — the depreciated replacement cost of structures on the parcel, reconciled against market data through annual trending.</li>
     </ul>
-    <p>The county submits annual ratio studies — comparing assessed values to actual sale prices — to the Indiana Department of Local Government Finance (DLGF) for certification.</p>
+    <p>Each year the county submits ratio studies — comparing total assessed values to actual sale prices — to the Indiana Department of Local Government Finance (DLGF) for certification.</p>
 
     <h3>Limitations</h3>
     <ul>
@@ -196,6 +196,7 @@
     map.addSource("upzoning-sites", { type: "vector", url: `pmtiles://${sitesUrl}` });
     map.addLayer({ id: "sites-fill",    type: "fill", source: "upzoning-sites", "source-layer": "sites", paint: fillPaint });
     map.addLayer({ id: "sites-outline", type: "line", source: "upzoning-sites", "source-layer": "sites", paint: linePaint });
+
   });
 
   const popup = new maplibregl.Popup({ closeButton: true, maxWidth: "280px" });
