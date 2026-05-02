@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tippecanoe County — Upzoning Opportunity</title>
+  <script src="https://unpkg.com/pmtiles@3.2.0/dist/pmtiles.js"></script>
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; }
+    #map { width: 100vw; height: 100vh; }
+
+    #legend {
+      position: absolute;
+      bottom: 32px;
+      left: 12px;
+      background: rgba(255,255,255,0.92);
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 12px;
+      line-height: 1.6;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    }
+    #legend h4 { font-size: 13px; margin-bottom: 6px; }
+    .swatch { display: inline-block; width: 14px; height: 14px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
+
+    #popup-content { font-size: 13px; line-height: 1.7; }
+    #popup-content strong { display: block; margin-bottom: 4px; font-size: 14px; }
+    #popup-content table { border-collapse: collapse; width: 100%; }
+    #popup-content td { padding: 1px 6px 1px 0; }
+    #popup-content td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="legend">
+  <h4>Upzoning Opportunity</h4>
+  <div><span class="swatch" style="background:#800026"></span>Tier 10 — highest</div>
+  <div><span class="swatch" style="background:#bd0026"></span>Tier 9</div>
+  <div><span class="swatch" style="background:#e31a1c"></span>Tier 8</div>
+  <div><span class="swatch" style="background:#fc4e2a"></span>Tier 7</div>
+  <div><span class="swatch" style="background:#fd8d3c"></span>Tier 6</div>
+  <div><span class="swatch" style="background:#feb24c"></span>Tier 5</div>
+  <div><span class="swatch" style="background:#fed976"></span>Tier 4</div>
+  <div><span class="swatch" style="background:#ffffb2"></span>Tier 3</div>
+  <div><span class="swatch" style="background:#d9f0a3"></span>Tier 2</div>
+  <div><span class="swatch" style="background:#addd8e"></span>Tier 1 — lowest</div>
+  <div style="margin-top:6px;color:#555">score = land_value_per_sqft / (ILR + 0.1)</div>
+</div>
+
+<script>
+  // Register pmtiles protocol with MapLibre
+  const protocol = new pmtiles.Protocol();
+  maplibregl.addProtocol("pmtiles", protocol.tile.bind(protocol));
+
+  const map = new maplibregl.Map({
+    container: "map",
+    style: {
+      version: 8,
+      sources: {
+        "carto-light": {
+          type: "raster",
+          tiles: ["https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"],
+          tileSize: 256,
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        }
+      },
+      layers: [{ id: "background", type: "raster", source: "carto-light" }]
+    },
+    center: [-86.878, 40.431],
+    zoom: 11
+  });
+
+  // 10-step YlOrRd colour ramp, tier 1 → green, tier 10 → dark red
+  const tierColor = [
+    "step", ["get", "tier"],
+    "#addd8e",   // fallback (shouldn't appear)
+     1, "#addd8e",
+     2, "#d9f0a3",
+     3, "#ffffb2",
+     4, "#fed976",
+     5, "#feb24c",
+     6, "#fd8d3c",
+     7, "#fc4e2a",
+     8, "#e31a1c",
+     9, "#bd0026",
+    10, "#800026"
+  ];
+
+  map.on("load", () => {
+    map.addSource("upzoning", {
+      type: "vector",
+      url: "pmtiles://upzoning.pmtiles"
+    });
+
+    // Fill layer — coloured by tier
+    map.addLayer({
+      id: "parcels-fill",
+      type: "fill",
+      source: "upzoning",
+      "source-layer": "parcels",
+      paint: {
+        "fill-color": tierColor,
+        "fill-opacity": [
+          "interpolate", ["linear"], ["zoom"],
+          10, 0.85,
+          15, 0.6
+        ]
+      }
+    });
+
+    // Outline — subtle at low zoom, visible at high zoom
+    map.addLayer({
+      id: "parcels-outline",
+      type: "line",
+      source: "upzoning",
+      "source-layer": "parcels",
+      paint: {
+        "line-color": "#555",
+        "line-width": [
+          "interpolate", ["linear"], ["zoom"],
+          12, 0.2,
+          16, 0.8
+        ],
+        "line-opacity": 0.4
+      }
+    });
+  });
+
+  // Popup on click
+  const popup = new maplibregl.Popup({ closeButton: true, maxWidth: "260px" });
+
+  map.on("click", "parcels-fill", (e) => {
+    const p = e.features[0].properties;
+
+    const fmt = (n) => n != null ? Number(n).toLocaleString(undefined, {maximumFractionDigits: 2}) : "—";
+    const fmtD = (n) => n != null ? "$" + Number(n).toLocaleString() : "—";
+
+    popup
+      .setLngLat(e.lngLat)
+      .setHTML(`
+        <div id="popup-content">
+          <strong>${p.Address || "(no address)"}</strong>
+          <table>
+            <tr><td>Class</td><td>${p.ClassCode || "—"}</td></tr>
+            <tr><td>Tier</td><td>${p.tier ?? "—"} / 10</td></tr>
+            <tr><td>ILR</td><td>${fmt(p.ILR)}</td></tr>
+            <tr><td>Land AV</td><td>${fmtD(p.land_av)}</td></tr>
+            <tr><td>Imp AV</td><td>${fmtD(p.imp_av)}</td></tr>
+            <tr><td>Land $/sqft</td><td>$${fmt(p.land_value_per_sqft)}</td></tr>
+          </table>
+        </div>
+      `)
+      .addTo(map);
+  });
+
+  map.on("mouseenter", "parcels-fill", () => { map.getCanvas().style.cursor = "pointer"; });
+  map.on("mouseleave", "parcels-fill", () => { map.getCanvas().style.cursor = ""; });
+
+  map.addControl(new maplibregl.NavigationControl(), "top-right");
+</script>
+</body>
+</html>

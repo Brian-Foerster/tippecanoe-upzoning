@@ -2,3 +2,6 @@ data/
 __pycache__/
 *.pyc
 .venv/
+
+# PMTiles output is committed so GitHub Pages can serve it
+!upzoning.pmtiles
