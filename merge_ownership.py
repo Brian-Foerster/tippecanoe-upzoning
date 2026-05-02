@@ -26,8 +26,9 @@ PARCELS_API = (
     "https://maps.tippecanoe.in.gov/server/rest/services/"
     "Parcels_FeatureService/FeatureServer/0/query"
 )
-CRS_PROJECTED    = "EPSG:2966"   # Indiana State Plane East (feet)
-ADJACENCY_BUFFER = 1.0           # feet — catches shared-boundary parcels
+CRS_PROJECTED      = "EPSG:2966"  # Indiana State Plane East (feet)
+ADJACENCY_BUFFER   = 1.0          # feet — catches shared-boundary parcels
+UNDERBUILT_THRESHOLD = 3.0        # must match analyze.py
 
 
 # ---------------------------------------------------------------------------
@@ -148,9 +149,10 @@ def make_site(cluster: gpd.GeoDataFrame) -> dict:
         .area.iloc[0]
     )
 
-    ILR   = (imp_av  / land_av)  if land_av   > 0 else None
+    ILR   = (imp_av  / land_av)   if land_av   > 0 else None
     lvpsf = (land_av / area_sqft) if area_sqft > 0 else None
-    score = (lvpsf / (ILR + 1.0)) if (ILR is not None and lvpsf is not None) else None
+    score = lvpsf  # pure land demand intensity; ILR used only as binary flag below
+    underbuilt = int(ILR is not None and ILR < UNDERBUILT_THRESHOLD)
 
     addrs = [a for a in cluster["Address"].dropna().unique() if a]
     modes = cluster["ClassCode"].dropna()
@@ -164,6 +166,7 @@ def make_site(cluster: gpd.GeoDataFrame) -> dict:
         "imp_av":              round(imp_av),
         "area_sqft":           round(area_sqft, 1),
         "ILR":                 round(ILR,   4) if ILR   is not None else None,
+        "underbuilt":          underbuilt,
         "land_value_per_sqft": round(lvpsf, 4) if lvpsf is not None else None,
         "upzoning_score":      round(score, 4) if score is not None else None,
         "geometry":            merged_geom,

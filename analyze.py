@@ -1,13 +1,13 @@
 """
-ILR-based upzoning opportunity screen for Tippecanoe County parcels.
+Land demand intensity screen for Tippecanoe County parcels.
 
-For each parcel, computes:
-  ILR                  = imp_av / land_av
-  land_value_per_sqft  = land_av / area_sqft
-  upzoning_score       = land_value_per_sqft / (ILR + 0.1)
+Score = land_value_per_sqft  (pure demand signal)
+underbuilt = 1 if ILR < UNDERBUILT_THRESHOLD  (binary filter, not continuous)
 
-High score = high land demand + underbuilt relative to land value.
-Parcels with land_av == 0 are dropped (exempt/data error).
+ILR is used only as a flag, not divided into the score. This avoids
+conflating an unreliable assessor split with a demand signal and matches
+practitioner convention (ESRI, Seattle OPCD, Auckland study) where ILR
+is treated as a threshold filter, not a continuous regressor.
 """
 
 import sys
@@ -28,6 +28,12 @@ OUT_CSV = Path("data/upzoning_scores.csv")
 
 # Indiana State Plane East (feet) — matches the source data projection
 CRS_PROJECTED = "EPSG:2966"
+
+# ILR threshold for "underbuilt" flag.
+# Literature standard is 1.0-1.5; county median is 6.2.
+# 3.0 covers the bottom ~10% of the county distribution — parcels where
+# the building is worth less than 3x the land, a meaningful local signal.
+UNDERBUILT_THRESHOLD = 3.0
 
 
 def fetch_data():
@@ -75,12 +81,13 @@ def compute_scores(gdf: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, dict]:
     gdf["ILR"] = (imp / land).round(4)
     gdf["land_value_per_sqft"] = (land / gdf["area_sqft"]).round(4)
 
-    # Score: penalise high ILR (well-built), reward high land value intensity.
-    # Adding 0.1 prevents division by zero for vacant lots while still letting
-    # them score ~10x higher than a parcel at ILR=1.
-    gdf["upzoning_score"] = (gdf["land_value_per_sqft"] / (gdf["ILR"] + 0.1)).round(4)
+    # Score = pure land demand intensity (land $/sqft)
+    gdf["upzoning_score"] = gdf["land_value_per_sqft"].round(4)
 
-    # Decile tiers: 10 = highest opportunity, 1 = lowest
+    # Underbuilt flag: ILR below threshold is a binary signal, not a divisor
+    gdf["underbuilt"] = (gdf["ILR"] < UNDERBUILT_THRESHOLD).astype(int)
+
+    # Decile tiers: 10 = highest demand, 1 = lowest
     gdf["tier"] = pd.qcut(gdf["upzoning_score"], q=10, labels=False, duplicates="drop") + 1
 
     dropped["total"] = n_input - len(gdf)
@@ -104,7 +111,7 @@ def main():
         "StKeyFull", "Address", "ClassCode", "TownshipName",
         "land_av", "imp_av", "total_av",
         "Year_Built", "SalesAmount", "SalesDate", "FinishLivingArea",
-        "area_sqft", "ILR", "land_value_per_sqft", "upzoning_score", "tier",
+        "area_sqft", "ILR", "underbuilt", "land_value_per_sqft", "upzoning_score", "tier",
         "geometry",
     ]
     out = gdf[[c for c in keep if c in gdf.columns]]
