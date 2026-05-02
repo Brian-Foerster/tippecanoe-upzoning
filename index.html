@@ -23,8 +23,46 @@
       line-height: 1.6;
       box-shadow: 0 1px 4px rgba(0,0,0,0.2);
     }
-    #legend h4 { font-size: 13px; margin-bottom: 6px; }
-    .swatch { display: inline-block; width: 14px; height: 14px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
+    #legend h4 { font-size: 13px; margin-bottom: 8px; }
+    #legend .gradient-bar {
+      width: 220px; height: 12px; border-radius: 2px;
+      background: linear-gradient(to right,
+        #addd8e 0%, #d9f0a3 12%, #ffffb2 25%, #fed976 38%,
+        #feb24c 50%, #fd8d3c 62%, #fc4e2a 75%, #e31a1c 85%,
+        #bd0026 95%, #800026 100%);
+    }
+    #legend .gradient-labels {
+      display: flex; justify-content: space-between;
+      width: 220px; font-size: 11px; color: #444;
+      margin-top: 3px; font-variant-numeric: tabular-nums;
+    }
+    #legend .desc { margin-top: 6px; font-size: 11px; color: #666; max-width: 220px; line-height: 1.4; }
+
+    /* Layer toggle */
+    #toggle {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      background: rgba(255,255,255,0.95);
+      border-radius: 6px;
+      padding: 4px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+      display: flex;
+      gap: 4px;
+    }
+    #toggle button {
+      padding: 5px 12px;
+      font-size: 12px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      background: transparent;
+      color: #444;
+    }
+    #toggle button.active {
+      background: #333;
+      color: #fff;
+    }
 
     #popup-content { font-size: 13px; line-height: 1.7; }
     #popup-content strong { display: block; margin-bottom: 4px; font-size: 14px; }
@@ -36,23 +74,21 @@
 <body>
 <div id="map"></div>
 
+<div id="toggle">
+  <button id="btn-parcels" class="active" onclick="setLayer('parcels')">Individual parcels</button>
+  <button id="btn-sites"              onclick="setLayer('sites')">Ownership sites</button>
+</div>
+
 <div id="legend">
-  <h4>Upzoning Opportunity</h4>
-  <div><span class="swatch" style="background:#800026"></span>Tier 10 — highest</div>
-  <div><span class="swatch" style="background:#bd0026"></span>Tier 9</div>
-  <div><span class="swatch" style="background:#e31a1c"></span>Tier 8</div>
-  <div><span class="swatch" style="background:#fc4e2a"></span>Tier 7</div>
-  <div><span class="swatch" style="background:#fd8d3c"></span>Tier 6</div>
-  <div><span class="swatch" style="background:#feb24c"></span>Tier 5</div>
-  <div><span class="swatch" style="background:#fed976"></span>Tier 4</div>
-  <div><span class="swatch" style="background:#ffffb2"></span>Tier 3</div>
-  <div><span class="swatch" style="background:#d9f0a3"></span>Tier 2</div>
-  <div><span class="swatch" style="background:#addd8e"></span>Tier 1 — lowest</div>
-  <div style="margin-top:6px;color:#555">score = land_value_per_sqft / (ILR + 0.1)</div>
+  <h4>Land $/sqft &divide; (ILR + 1)</h4>
+  <div class="gradient-bar"></div>
+  <div class="gradient-labels">
+    <span>0</span><span>1</span><span>2.5</span><span>5+</span>
+  </div>
+  <div class="desc">High = expensive land relative to what's built on it.<br>ILR = improvement AV / land AV.</div>
 </div>
 
 <script>
-  // Register pmtiles protocol with MapLibre
   const protocol = new pmtiles.Protocol();
   maplibregl.addProtocol("pmtiles", protocol.tile.bind(protocol));
 
@@ -74,91 +110,97 @@
     zoom: 11
   });
 
-  // 10-step YlOrRd colour ramp, tier 1 → green, tier 10 → dark red
-  const tierColor = [
-    "step", ["get", "tier"],
-    "#addd8e",   // fallback (shouldn't appear)
-     1, "#addd8e",
-     2, "#d9f0a3",
-     3, "#ffffb2",
-     4, "#fed976",
-     5, "#feb24c",
-     6, "#fd8d3c",
-     7, "#fc4e2a",
-     8, "#e31a1c",
-     9, "#bd0026",
-    10, "#800026"
+  const score = ["/", ["get", "land_value_per_sqft"], ["+", ["get", "ILR"], 1.0]];
+
+  const scoreColor = [
+    "interpolate", ["linear"], score,
+    0,   "#addd8e",
+    0.5, "#d9f0a3",
+    1.0, "#ffffb2",
+    1.5, "#fed976",
+    2.0, "#feb24c",
+    2.5, "#fd8d3c",
+    3.0, "#fc4e2a",
+    4.0, "#e31a1c",
+    5.0, "#800026"
   ];
 
+  const fillPaint = {
+    "fill-color": scoreColor,
+    "fill-opacity": ["interpolate", ["linear"], ["zoom"], 10, 0.85, 15, 0.6]
+  };
+  const linePaint = {
+    "line-color": "#555",
+    "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.2, 16, 0.8],
+    "line-opacity": 0.4
+  };
+
+  const base = window.location.href;
+  const parcelsUrl = new URL("upzoning.pmtiles",       base).href;
+  const sitesUrl   = new URL("upzoning_sites.pmtiles", base).href;
+
   map.on("load", () => {
-    map.addSource("upzoning", {
-      type: "vector",
-      url: "pmtiles://upzoning.pmtiles"
-    });
+    // Parcel-level source + layers
+    map.addSource("upzoning-parcels", { type: "vector", url: `pmtiles://${parcelsUrl}` });
+    map.addLayer({ id: "parcels-fill",    type: "fill", source: "upzoning-parcels", "source-layer": "parcels", paint: fillPaint });
+    map.addLayer({ id: "parcels-outline", type: "line", source: "upzoning-parcels", "source-layer": "parcels", paint: linePaint });
 
-    // Fill layer — coloured by tier
-    map.addLayer({
-      id: "parcels-fill",
-      type: "fill",
-      source: "upzoning",
-      "source-layer": "parcels",
-      paint: {
-        "fill-color": tierColor,
-        "fill-opacity": [
-          "interpolate", ["linear"], ["zoom"],
-          10, 0.85,
-          15, 0.6
-        ]
-      }
-    });
-
-    // Outline — subtle at low zoom, visible at high zoom
-    map.addLayer({
-      id: "parcels-outline",
-      type: "line",
-      source: "upzoning",
-      "source-layer": "parcels",
-      paint: {
-        "line-color": "#555",
-        "line-width": [
-          "interpolate", ["linear"], ["zoom"],
-          12, 0.2,
-          16, 0.8
-        ],
-        "line-opacity": 0.4
-      }
-    });
+    // Ownership-site source + layers (hidden initially)
+    map.addSource("upzoning-sites", { type: "vector", url: `pmtiles://${sitesUrl}` });
+    map.addLayer({ id: "sites-fill",    type: "fill", source: "upzoning-sites", "source-layer": "sites", paint: fillPaint,  layout: { visibility: "none" } });
+    map.addLayer({ id: "sites-outline", type: "line", source: "upzoning-sites", "source-layer": "sites", paint: linePaint, layout: { visibility: "none" } });
   });
 
-  // Popup on click
-  const popup = new maplibregl.Popup({ closeButton: true, maxWidth: "260px" });
+  // Layer toggle
+  let activeLayer = "parcels";
 
-  map.on("click", "parcels-fill", (e) => {
+  function setLayer(which) {
+    activeLayer = which;
+    const show = which === "parcels" ? ["parcels-fill", "parcels-outline"] : ["sites-fill",   "sites-outline"];
+    const hide  = which === "parcels" ? ["sites-fill",   "sites-outline"]  : ["parcels-fill", "parcels-outline"];
+    show.forEach(id => map.setLayoutProperty(id, "visibility", "visible"));
+    hide.forEach(id => map.setLayoutProperty(id, "visibility", "none"));
+    document.getElementById("btn-parcels").classList.toggle("active", which === "parcels");
+    document.getElementById("btn-sites"  ).classList.toggle("active", which === "sites");
+    popup.remove();
+  }
+
+  // Popup
+  const popup = new maplibregl.Popup({ closeButton: true, maxWidth: "280px" });
+
+  function showPopup(e) {
     const p = e.features[0].properties;
+    const fmt  = n => n != null ? Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—";
+    const fmtD = n => n != null ? "$" + Number(n).toLocaleString() : "—";
+    const computedScore = (p.land_value_per_sqft != null && p.ILR != null)
+      ? p.land_value_per_sqft / (Number(p.ILR) + 1.0) : null;
 
-    const fmt = (n) => n != null ? Number(n).toLocaleString(undefined, {maximumFractionDigits: 2}) : "—";
-    const fmtD = (n) => n != null ? "$" + Number(n).toLocaleString() : "—";
+    const isParcel = activeLayer === "parcels";
+    const title    = isParcel ? (p.Address || "(no address)") : (p.addresses || "(no address)");
+    const extra    = isParcel ? "" : `
+      <tr><td>Owner</td><td>${p.owner || "—"}</td></tr>
+      <tr><td>Parcels</td><td>${p.n_parcels ?? "—"}</td></tr>`;
 
-    popup
-      .setLngLat(e.lngLat)
-      .setHTML(`
-        <div id="popup-content">
-          <strong>${p.Address || "(no address)"}</strong>
-          <table>
-            <tr><td>Class</td><td>${p.ClassCode || "—"}</td></tr>
-            <tr><td>Tier</td><td>${p.tier ?? "—"} / 10</td></tr>
-            <tr><td>ILR</td><td>${fmt(p.ILR)}</td></tr>
-            <tr><td>Land AV</td><td>${fmtD(p.land_av)}</td></tr>
-            <tr><td>Imp AV</td><td>${fmtD(p.imp_av)}</td></tr>
-            <tr><td>Land $/sqft</td><td>$${fmt(p.land_value_per_sqft)}</td></tr>
-          </table>
-        </div>
-      `)
-      .addTo(map);
+    popup.setLngLat(e.lngLat).setHTML(`
+      <div id="popup-content">
+        <strong>${title}</strong>
+        <table>
+          <tr><td>Class</td><td>${p.ClassCode || "—"}</td></tr>
+          ${extra}
+          <tr><td>Score</td><td>${fmt(computedScore)}</td></tr>
+          <tr><td>ILR</td><td>${fmt(p.ILR)}</td></tr>
+          <tr><td>Land AV</td><td>${fmtD(p.land_av)}</td></tr>
+          <tr><td>Imp AV</td><td>${fmtD(p.imp_av)}</td></tr>
+          <tr><td>Land $/sqft</td><td>$${fmt(p.land_value_per_sqft)}</td></tr>
+        </table>
+      </div>`).addTo(map);
+  }
+
+  ["parcels-fill", "sites-fill"].forEach(id => {
+    map.on("click",       id, showPopup);
+    map.on("mouseenter",  id, () => { map.getCanvas().style.cursor = "pointer"; });
+    map.on("mouseleave",  id, () => { map.getCanvas().style.cursor = ""; });
   });
-
-  map.on("mouseenter", "parcels-fill", () => { map.getCanvas().style.cursor = "pointer"; });
-  map.on("mouseleave", "parcels-fill", () => { map.getCanvas().style.cursor = ""; });
 
   map.addControl(new maplibregl.NavigationControl(), "top-right");
 </script>

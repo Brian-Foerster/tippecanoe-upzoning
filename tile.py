@@ -1,7 +1,8 @@
 """
-Convert upzoning_scores.geojson → upzoning.pmtiles using GDAL's PMTiles
-driver (bundled with pyogrio). Output goes to the repo root so index.html
-can reference it with a simple relative path.
+Convert GeoJSON outputs to PMTiles using GDAL's PMTiles driver (via pyogrio).
+Tiles both parcel-level and ownership-merged site-level data.
+
+Run after analyze.py and merge_ownership.py.
 """
 
 import sys
@@ -10,36 +11,62 @@ from pathlib import Path
 import geopandas as gpd
 import pyogrio
 
-IN = Path("data/upzoning_scores.geojson")
-OUT = Path("upzoning.pmtiles")
-
-# Only these columns end up in the tiles — keeps file size down
-KEEP = [
-    "tier", "ILR", "land_value_per_sqft",
-    "Address", "ClassCode", "land_av", "imp_av",
-    "geometry",
+JOBS = [
+    {
+        "in":      Path("data/upzoning_scores.geojson"),
+        "out":     Path("upzoning.pmtiles"),
+        "layer":   "parcels",
+        "keep":    ["ILR", "land_value_per_sqft", "Address", "ClassCode", "land_av", "imp_av"],
+        "minzoom": "10",
+        "maxzoom": "16",
+        "requires": "analyze.py",
+    },
+    {
+        "in":      Path("data/upzoning_sites.geojson"),
+        "out":     Path("upzoning_sites.pmtiles"),
+        "layer":   "sites",
+        "keep":    ["ILR", "land_value_per_sqft", "addresses", "owner", "n_parcels",
+                    "ClassCode", "land_av", "imp_av", "upzoning_score"],
+        "minzoom": "10",
+        "maxzoom": "16",
+        "requires": "merge_ownership.py",
+    },
 ]
 
-if not IN.exists():
-    sys.exit(f"ERROR: {IN} not found — run analyze.py first")
+any_missing = False
+for job in JOBS:
+    if not job["in"].exists():
+        print(f"SKIP {job['out'].name} — {job['in']} not found (run {job['requires']} first)")
+        any_missing = True
 
-print(f"Reading {IN} ({IN.stat().st_size / 1e6:.0f} MB)...")
-gdf = gpd.read_file(IN)
-out = gdf[[c for c in KEEP if c in gdf.columns]].copy()
-print(f"  {len(out):,} features")
+if any_missing and all(not j["in"].exists() for j in JOBS):
+    sys.exit("No input files found.")
 
-print(f"Writing {OUT}...")
-pyogrio.write_dataframe(
-    out,
-    str(OUT),
-    layer="parcels",
-    dataset_options={
-        "MINZOOM": "10",
-        "MAXZOOM": "16",
-    },
-)
+for job in JOBS:
+    if not job["in"].exists():
+        continue
 
-size_mb = OUT.stat().st_size / 1e6
-print(f"Done — {OUT} is {size_mb:.1f} MB")
-if size_mb > 90:
-    print("WARNING: file is large for GitHub Pages (>90 MB) — consider Git LFS")
+    src = job["in"]
+    dst = job["out"]
+    print(f"\n{'-'*50}")
+    print(f"Reading {src} ({src.stat().st_size / 1e6:.0f} MB)...")
+    gdf = gpd.read_file(src)
+    keep = ["geometry"] + [c for c in job["keep"] if c in gdf.columns]
+    out  = gdf[keep].copy()
+    print(f"  {len(out):,} features, {len(keep)-1} attribute columns")
+
+    if dst.exists():
+        dst.unlink()
+
+    print(f"Writing {dst}...")
+    pyogrio.write_dataframe(
+        out,
+        str(dst),
+        layer=job["layer"],
+        dataset_options={"MINZOOM": job["minzoom"], "MAXZOOM": job["maxzoom"]},
+    )
+
+    size_mb = dst.stat().st_size / 1e6
+    print(f"Done — {dst} is {size_mb:.1f} MB")
+    if size_mb > 90:
+        print("WARNING: >90 MB — consider Git LFS for GitHub Pages")
