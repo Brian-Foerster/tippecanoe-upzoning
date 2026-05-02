@@ -25,7 +25,7 @@ JOBS = [
         "in":      Path("data/upzoning_sites.geojson"),
         "out":     Path("upzoning_sites.pmtiles"),
         "layer":   "sites",
-        "keep":    ["ILR", "underbuilt", "land_value_per_sqft", "addresses", "owner",
+        "keep":    ["ILR", "land_value_per_sqft", "addresses", "owner",
                     "n_parcels", "ClassCode", "land_av", "imp_av", "upzoning_score"],
         "minzoom": "10",
         "maxzoom": "16",

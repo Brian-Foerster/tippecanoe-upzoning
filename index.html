@@ -56,11 +56,7 @@
   <div class="gradient-labels">
     <span>$0</span><span>$4</span><span>$10</span><span>$20+</span>
   </div>
-  <div class="desc" style="margin-top:8px">
-    <span style="display:inline-block;width:28px;height:3px;background:#1a006e;vertical-align:middle;margin-right:5px;border-radius:1px"></span>
-    Dark border = underbuilt (ILR &lt; 3)
-  </div>
-  <div class="desc" style="margin-top:4px;color:#666">ILR = improvement AV / land AV</div>
+  <div class="desc">High = strong market demand for the location.</div>
 </div>
 
 <script>
@@ -114,19 +110,6 @@
     map.addLayer({ id: "sites-fill",    type: "fill", source: "upzoning-sites", "source-layer": "sites", paint: fillPaint });
     map.addLayer({ id: "sites-outline", type: "line", source: "upzoning-sites", "source-layer": "sites", paint: linePaint });
 
-    // Thick outline for sites flagged as underbuilt (ILR < 3.0)
-    map.addLayer({
-      id: "sites-underbuilt",
-      type: "line",
-      source: "upzoning-sites",
-      "source-layer": "sites",
-      filter: ["==", ["get", "underbuilt"], 1],
-      paint: {
-        "line-color": "#1a006e",
-        "line-width": ["interpolate", ["linear"], ["zoom"], 12, 1.5, 16, 3],
-        "line-opacity": 0.85
-      }
-    });
   });
 
   // Popup
@@ -136,10 +119,6 @@
     const p = e.features[0].properties;
     const fmt  = n => n != null ? Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—";
     const fmtD = n => n != null ? "$" + Number(n).toLocaleString() : "—";
-    const underbuiltLabel = p.underbuilt == 1
-      ? "<span style='color:#1a006e;font-weight:600'>Yes (ILR &lt; 3)</span>"
-      : "No";
-
     popup.setLngLat(e.lngLat).setHTML(`
       <div id="popup-content">
         <strong>${p.addresses || "(no address)"}</strong>
@@ -149,7 +128,6 @@
           <tr><td>Class</td><td>${p.ClassCode || "—"}</td></tr>
           <tr><td>Land $/sqft</td><td>$${fmt(p.land_value_per_sqft)}</td></tr>
           <tr><td>ILR</td><td>${fmt(p.ILR)}</td></tr>
-          <tr><td>Underbuilt</td><td>${underbuiltLabel}</td></tr>
           <tr><td>Land AV</td><td>${fmtD(p.land_av)}</td></tr>
           <tr><td>Imp AV</td><td>${fmtD(p.imp_av)}</td></tr>
         </table>
