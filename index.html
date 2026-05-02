@@ -12,6 +12,7 @@
     body { font-family: system-ui, sans-serif; }
     #map { width: 100vw; height: 100vh; }
 
+    /* Legend */
     #legend {
       position: absolute;
       bottom: 32px;
@@ -27,9 +28,8 @@
     #legend .gradient-bar {
       width: 220px; height: 12px; border-radius: 2px;
       background: linear-gradient(to right,
-        #addd8e 0%, #d9f0a3 12%, #ffffb2 25%, #fed976 38%,
-        #feb24c 50%, #fd8d3c 62%, #fc4e2a 75%, #e31a1c 85%,
-        #bd0026 95%, #800026 100%);
+        #addd8e 0%, #ffffb2 25%, #fed976 45%,
+        #fd8d3c 62%, #e31a1c 80%, #800026 100%);
     }
     #legend .gradient-labels {
       display: flex; justify-content: space-between;
@@ -37,8 +37,64 @@
       margin-top: 3px; font-variant-numeric: tabular-nums;
     }
     #legend .desc { margin-top: 6px; font-size: 11px; color: #666; max-width: 220px; line-height: 1.4; }
+    #legend .about-btn {
+      margin-top: 8px;
+      display: block;
+      width: 100%;
+      padding: 4px 0;
+      font-size: 11px;
+      text-align: center;
+      background: none;
+      border: 1px solid #bbb;
+      border-radius: 4px;
+      cursor: pointer;
+      color: #444;
+    }
+    #legend .about-btn:hover { background: #f5f5f5; }
 
+    /* About modal */
+    #modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    #modal-backdrop.open { display: flex; }
+    #modal {
+      background: #fff;
+      border-radius: 8px;
+      padding: 28px 32px;
+      max-width: 540px;
+      width: calc(100% - 32px);
+      max-height: 85vh;
+      overflow-y: auto;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+      position: relative;
+      font-size: 14px;
+      line-height: 1.65;
+      color: #222;
+    }
+    #modal h2 { font-size: 17px; margin-bottom: 18px; }
+    #modal h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: #555; margin: 20px 0 6px; }
+    #modal p  { margin-bottom: 10px; }
+    #modal ul { padding-left: 18px; margin-bottom: 10px; }
+    #modal li { margin-bottom: 6px; }
+    #modal .close {
+      position: absolute;
+      top: 14px; right: 18px;
+      font-size: 20px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #666;
+      line-height: 1;
+    }
+    #modal .close:hover { color: #000; }
 
+    /* Popup */
     #popup-content { font-size: 13px; line-height: 1.7; }
     #popup-content strong { display: block; margin-bottom: 4px; font-size: 14px; }
     #popup-content table { border-collapse: collapse; width: 100%; }
@@ -49,7 +105,6 @@
 <body>
 <div id="map"></div>
 
-
 <div id="legend">
   <h4>Land assessed value / lot area</h4>
   <div class="gradient-bar"></div>
@@ -57,6 +112,41 @@
     <span>$0</span><span>$4</span><span>$10</span><span>$20+</span>
   </div>
   <div class="desc">High = strong market demand for the location.</div>
+  <button class="about-btn" onclick="document.getElementById('modal-backdrop').classList.add('open')">
+    About this map
+  </button>
+</div>
+
+<!-- About modal -->
+<div id="modal-backdrop" onclick="if(event.target===this)this.classList.remove('open')">
+  <div id="modal">
+    <button class="close" onclick="document.getElementById('modal-backdrop').classList.remove('open')">&times;</button>
+    <h2>Tippecanoe County — Upzoning Opportunity</h2>
+
+    <h3>What this map shows</h3>
+    <p>Each shape is an <strong>ownership site</strong> — one or more adjacent parcels held by the same owner, merged into a single development footprint. Sites are coloured by <strong>land assessed value per square foot</strong>: darker red means the market values that land more highly per unit area.</p>
+    <p>This is a proxy for where density would be most economically viable if zoning allowed it. Locations where land is expensive relative to its area are the places developers would most want to build — and where upzoning would most likely trigger new construction.</p>
+
+    <h3>How land AV is calculated</h3>
+    <p>Indiana law requires all property to be assessed at <strong>100% of market value-in-use</strong>. The Tippecanoe County Assessor uses a Computer-Assisted Mass Appraisal (CAMA) system that splits each parcel's total assessed value into two parts:</p>
+    <ul>
+      <li><strong>Land AV</strong> — the value of the land as if it were vacant, derived from comparable vacant-land sales and location-based pricing by neighbourhood.</li>
+      <li><strong>Improvement AV</strong> — the depreciated replacement cost of whatever is built on it.</li>
+    </ul>
+    <p>The county submits annual ratio studies — comparing assessed values to actual sale prices — to the Indiana Department of Local Government Finance (DLGF) for certification.</p>
+
+    <h3>Limitations</h3>
+    <ul>
+      <li><strong>The land/improvement split is not independently validated.</strong> Ratio studies only check total assessed value against sale price. The split between land AV and improvement AV is generated by CAMA model assumptions and is the least reliable part of the assessment — particularly for vacant and underutilised parcels.</li>
+      <li><strong>The score measures demand, not constraint.</strong> A high land $/sqft means the location is valuable; it does not mean current zoning is what's holding back development. Other factors — financing, construction costs, ownership fragmentation — may be equally binding.</li>
+      <li><strong>Institutional owners inflate scores.</strong> Universities, government bodies, and large landlords own high-value land but are unlikely candidates for private redevelopment. Filter by owner name if using this for targeting.</li>
+      <li><strong>Assessment data lags the market.</strong> Residential values are trended annually against sales; commercial values use cost tables updated every four years. Fast-moving markets may be under-assessed.</li>
+      <li><strong>Owner name matching is imperfect.</strong> Ownership sites are assembled by normalising and grouping owner names from county records. Entities with inconsistent naming may appear as separate sites.</li>
+    </ul>
+
+    <h3>Data sources</h3>
+    <p>Parcel boundaries and assessed values: Tippecanoe County Assessor, via the <a href="https://github.com/Brian-Foerster/Greater-Lafayette-Corridor-Analysis" target="_blank">Greater Lafayette Corridor Analysis</a> project. Owner names: Tippecanoe County ArcGIS parcel service.</p>
+  </div>
 </div>
 
 <script>
@@ -81,16 +171,14 @@
     zoom: 11
   });
 
-  // Score = land_value_per_sqft directly (pure demand signal)
-  // Breakpoints tuned to county distribution: p50=$2.82, p75=$4.33, p90=$6.23, p99=$17
   const scoreColor = [
     "interpolate", ["linear"], ["get", "land_value_per_sqft"],
-    0,    "#addd8e",
-    2,    "#ffffb2",
-    4,    "#fed976",
-    6,    "#fd8d3c",
-    10,   "#e31a1c",
-    20,   "#800026"
+    0,  "#addd8e",
+    2,  "#ffffb2",
+    4,  "#fed976",
+    6,  "#fd8d3c",
+    10, "#e31a1c",
+    20, "#800026"
   ];
 
   const fillPaint = {
@@ -109,10 +197,8 @@
     map.addSource("upzoning-sites", { type: "vector", url: `pmtiles://${sitesUrl}` });
     map.addLayer({ id: "sites-fill",    type: "fill", source: "upzoning-sites", "source-layer": "sites", paint: fillPaint });
     map.addLayer({ id: "sites-outline", type: "line", source: "upzoning-sites", "source-layer": "sites", paint: linePaint });
-
   });
 
-  // Popup
   const popup = new maplibregl.Popup({ closeButton: true, maxWidth: "280px" });
 
   map.on("click", "sites-fill", (e) => {
